@@ -1,18 +1,19 @@
 import Post from "../models/Post.js";
+import { uploadImage } from "../config/cloudinary.js";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/posts
-// Query: page, limit
-// Used by: Feed.jsx (student + alumni), FeedList.jsx, PostCard.jsx
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// GET POSTS
+// ─────────────────────────────────────────────
 export const getPosts = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
     const total = await Post.countDocuments();
+
     const posts = await Post.find()
       .populate("author", "name avatar role college company alumniPlan isVerified")
+      .populate("comments.author", "name avatar role") // ✅ ADD
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit));
@@ -20,7 +21,7 @@ export const getPosts = async (req, res) => {
     res.json({
       posts,
       total,
-      page:       Number(page),
+      page: Number(page),
       totalPages: Math.ceil(total / Number(limit)),
     });
   } catch (err) {
@@ -28,11 +29,9 @@ export const getPosts = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/posts
-// Body: { content, media[]?, tags[]? }
-// Used by: CreatePost.jsx
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// CREATE POST
+// ─────────────────────────────────────────────
 export const createPost = async (req, res) => {
   try {
     const { content, media, tags } = req.body;
@@ -41,14 +40,23 @@ export const createPost = async (req, res) => {
       return res.status(400).json({ message: "Post content cannot be empty" });
     }
 
+    let uploadedMedia = [];
+
+    // ✅ OPTIONAL: upload images if provided
+    if (media && media.length > 0) {
+      for (let file of media) {
+        const result = await uploadImage(file, "posts");
+        uploadedMedia.push(result.url);
+      }
+    }
+
     const post = await Post.create({
-      author:  req.user.id,
+      author: req.user._id, // ✅ FIX
       content: content.trim(),
-      media:   media  || [],
-      tags:    tags   || [],
+      media: uploadedMedia.length ? uploadedMedia : [],
+      tags: tags || [],
     });
 
-    // Populate author for immediate frontend use
     await post.populate("author", "name avatar role college company alumniPlan isVerified");
 
     res.status(201).json({ message: "Post created", post });
@@ -57,17 +65,15 @@ export const createPost = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/posts/:id/like
-// Toggles like — adds if not liked, removes if already liked
-// Used by: PostCard.jsx heart button
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// TOGGLE LIKE
+// ─────────────────────────────────────────────
 export const toggleLike = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
     if (!post) return res.status(404).json({ message: "Post not found" });
 
-    const userId   = req.user.id;
+    const userId = req.user._id; // ✅ FIX
     const alreadyLiked = post.likes.includes(userId);
 
     if (alreadyLiked) {
@@ -75,10 +81,11 @@ export const toggleLike = async (req, res) => {
     } else {
       post.likes.push(userId);
     }
+
     await post.save();
 
     res.json({
-      liked:      !alreadyLiked,
+      liked: !alreadyLiked,
       likesCount: post.likes.length,
     });
   } catch (err) {
@@ -86,15 +93,14 @@ export const toggleLike = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/posts/:id/comment
-// Body: { text }
-// Used by: PostCard.jsx comment section
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// ADD COMMENT
+// ─────────────────────────────────────────────
 export const addComment = async (req, res) => {
   try {
-    const { text } = req.body;
-    if (!text || !text.trim()) {
+    const { content } = req.body; // ✅ FIX (text → content)
+
+    if (!content || !content.trim()) {
       return res.status(400).json({ message: "Comment cannot be empty" });
     }
 
@@ -102,14 +108,15 @@ export const addComment = async (req, res) => {
     if (!post) return res.status(404).json({ message: "Post not found" });
 
     const comment = {
-      author: req.user.id,
-      text:   text.trim(),
+      author: req.user._id, // ✅ FIX
+      content: content.trim(), // ✅ FIX
     };
+
     post.comments.push(comment);
     await post.save();
 
-    // Return the populated post
     await post.populate("comments.author", "name avatar role");
+
     const newComment = post.comments[post.comments.length - 1];
 
     res.status(201).json({ message: "Comment added", comment: newComment });
@@ -118,18 +125,44 @@ export const addComment = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PUT /api/posts/:id
-// Body: { content, media[]?, tags[]? }
-// Only the original author can edit — admin cannot edit others' posts
-// Sets isEdited: true so frontend can show an "edited" badge if needed
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// ❗ DELETE COMMENT (MISSING)
+// ─────────────────────────────────────────────
+export const deleteComment = async (req, res) => {
+  try {
+    const { postId, commentId } = req.params;
+
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ message: "Post not found" });
+
+    const comment = post.comments.id(commentId);
+    if (!comment) return res.status(404).json({ message: "Comment not found" });
+
+    const isOwner = comment.author.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === "admin";
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    comment.deleteOne();
+    await post.save();
+
+    res.json({ message: "Comment deleted" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+// ─────────────────────────────────────────────
+// EDIT POST
+// ─────────────────────────────────────────────
 export const editPost = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
     if (!post) return res.status(404).json({ message: "Post not found" });
 
-    if (post.author.toString() !== req.user.id) {
+    if (post.author.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Not authorized to edit this post" });
     }
 
@@ -139,9 +172,9 @@ export const editPost = async (req, res) => {
       return res.status(400).json({ message: "Post content cannot be empty" });
     }
 
-    post.content  = content.trim();
-    post.media    = media ?? post.media;
-    post.tags     = tags  ?? post.tags;
+    post.content = content.trim();
+    post.media = media ?? post.media;
+    post.tags = tags ?? post.tags;
     post.isEdited = true;
 
     await post.save();
@@ -153,23 +186,23 @@ export const editPost = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DELETE /api/posts/:id
-// Author or admin can delete
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// DELETE POST
+// ─────────────────────────────────────────────
 export const deletePost = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
     if (!post) return res.status(404).json({ message: "Post not found" });
 
-    const isOwner = post.author.toString() === req.user.id;
+    const isOwner = post.author.toString() === req.user._id.toString();
     const isAdmin = req.user.role === "admin";
 
     if (!isOwner && !isAdmin) {
-      return res.status(403).json({ message: "Not authorized to delete this post" });
+      return res.status(403).json({ message: "Not authorized" });
     }
 
     await post.deleteOne();
+
     res.json({ message: "Post deleted" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });

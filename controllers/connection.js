@@ -1,47 +1,48 @@
 import Connection from "../models/Connection.js";
 import BaseUser from "../models/BaseUser.js";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/connections/request/:alumniId
-// Student sends connection request to an alumni
-// Used by: AlumniCard.jsx "Connect" button
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// SEND REQUEST
+// ─────────────────────────────────────────────
 export const sendRequest = async (req, res) => {
   try {
     const { alumniId } = req.params;
-    const studentId    = req.user.id;
+    const studentId = req.user._id; // ✅ FIX (_id instead of id)
 
-    if (studentId === alumniId) {
+    if (studentId.toString() === alumniId) {
       return res.status(400).json({ message: "Cannot connect with yourself" });
     }
 
-    // Check alumni exists
     const alumni = await BaseUser.findById(alumniId);
     if (!alumni || alumni.role !== "alumni") {
       return res.status(404).json({ message: "Alumni not found" });
     }
 
-    // Check if request already exists
+    // 🔥 IMPORTANT: check both directions
     const existing = await Connection.findOne({
-      from: studentId,
-      to:   alumniId,
+      $or: [
+        { from: studentId, to: alumniId },
+        { from: alumniId, to: studentId },
+      ],
     });
+
     if (existing) {
       return res.status(409).json({
-        message: existing.status === "accepted"
-          ? "Already connected"
-          : "Request already sent",
+        message:
+          existing.status === "accepted"
+            ? "Already connected"
+            : "Request already exists",
       });
     }
 
     const connection = await Connection.create({
-      from:   studentId,
-      to:     alumniId,
+      from: studentId,
+      to: alumniId,
       status: "pending",
     });
 
     await connection.populate("from", "name avatar role college");
-    await connection.populate("to",   "name avatar role company");
+    await connection.populate("to", "name avatar role company");
 
     res.status(201).json({ message: "Connection request sent", connection });
   } catch (err) {
@@ -49,20 +50,19 @@ export const sendRequest = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PATCH /api/connections/accept/:requestId
-// Alumni accepts a pending connection request
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// ACCEPT REQUEST
+// ─────────────────────────────────────────────
 export const acceptRequest = async (req, res) => {
   try {
     const connection = await Connection.findById(req.params.requestId);
+
     if (!connection) {
       return res.status(404).json({ message: "Connection request not found" });
     }
 
-    // Only the recipient (alumni) can accept
-    if (connection.to.toString() !== req.user.id) {
-      return res.status(403).json({ message: "Not authorized to accept this request" });
+    if (connection.to.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorized" });
     }
 
     connection.status = "accepted";
@@ -74,19 +74,43 @@ export const acceptRequest = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/connections
-// Returns all accepted connections for the logged-in user
-// Used by: AlumniProfile page — check if already connected
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// ❗ NEW: REJECT REQUEST (MISSING)
+// ─────────────────────────────────────────────
+export const rejectRequest = async (req, res) => {
+  try {
+    const connection = await Connection.findById(req.params.requestId);
+
+    if (!connection) {
+      return res.status(404).json({ message: "Connection request not found" });
+    }
+
+    if (connection.to.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    connection.status = "rejected";
+    await connection.save();
+
+    res.json({ message: "Connection rejected", connection });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+// ─────────────────────────────────────────────
+// GET MY CONNECTIONS
+// ─────────────────────────────────────────────
 export const getMyConnections = async (req, res) => {
   try {
+    const userId = req.user._id;
+
     const connections = await Connection.find({
-      $or:    [{ from: req.user.id }, { to: req.user.id }],
+      $or: [{ from: userId }, { to: userId }],
       status: "accepted",
     })
       .populate("from", "name avatar role college company")
-      .populate("to",   "name avatar role college company")
+      .populate("to", "name avatar role college company")
       .sort({ updatedAt: -1 });
 
     res.json({ connections });
@@ -95,18 +119,43 @@ export const getMyConnections = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/connections/pending
-// Alumni sees all pending incoming requests
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// GET PENDING REQUESTS
+// ─────────────────────────────────────────────
 export const getPendingRequests = async (req, res) => {
   try {
     const pending = await Connection.find({
-      to:     req.user.id,
+      to: req.user._id,
       status: "pending",
     }).populate("from", "name avatar role college");
 
     res.json({ pending });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+// ─────────────────────────────────────────────
+// ❗ NEW: GET CONNECTION STATUS (VERY IMPORTANT)
+// Used by frontend button (Connect / Pending / Connected)
+// ─────────────────────────────────────────────
+export const getConnectionStatus = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const currentUserId = req.user._id;
+
+    const connection = await Connection.findOne({
+      $or: [
+        { from: currentUserId, to: userId },
+        { from: userId, to: currentUserId },
+      ],
+    });
+
+    if (!connection) {
+      return res.json({ status: "none" });
+    }
+
+    res.json({ status: connection.status });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

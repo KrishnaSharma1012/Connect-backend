@@ -1,24 +1,23 @@
 import Message from "../models/Message.js";
 import BaseUser from "../models/BaseUser.js";
 
-// Token rules (from Earnings.jsx TOKEN_ACTIVITY and frontend analysis)
+// Token rules
 const TOKENS = {
-  REPLY_2H: 5,   // replied within 2 hours
-  REPLY_4H: 3,   // replied within 4 hours
+  REPLY_2H: 5,
+  REPLY_4H: 3,
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/messages/conversations
-// Returns list of unique conversations for the logged-in user
-// Used by: ConversationList.jsx, Messages.jsx (student + alumni)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// GET CONVERSATIONS
+// ─────────────────────────────────────────────
 export const getConversations = async (req, res) => {
   try {
-    // Get the last message per conversation partner
+    const userId = req.user._id;
+
     const conversations = await Message.aggregate([
       {
         $match: {
-          $or: [{ sender: req.user._id }, { receiver: req.user._id }],
+          $or: [{ sender: userId }, { receiver: userId }],
         },
       },
       { $sort: { createdAt: -1 } },
@@ -26,17 +25,22 @@ export const getConversations = async (req, res) => {
         $group: {
           _id: {
             $cond: [
-              { $eq: ["$sender", req.user._id] },
+              { $eq: ["$sender", userId] },
               "$receiver",
               "$sender",
             ],
           },
-          lastMessage: { $first: "$text" },
-          lastTime:    { $first: "$createdAt" },
-          unread:      {
+          lastMessage: { $first: "$content" }, // ✅ FIX (text → content)
+          lastTime: { $first: "$createdAt" },
+          unread: {
             $sum: {
               $cond: [
-                { $and: [{ $eq: ["$receiver", req.user._id] }, { $eq: ["$read", false] }] },
+                {
+                  $and: [
+                    { $eq: ["$receiver", userId] },
+                    { $eq: ["$read", false] },
+                  ],
+                },
                 1,
                 0,
               ],
@@ -47,17 +51,16 @@ export const getConversations = async (req, res) => {
       { $sort: { lastTime: -1 } },
     ]);
 
-    // Populate partner details
     const populated = await BaseUser.populate(conversations, {
       path: "_id",
       select: "name avatar role college company alumniPlan isVerified",
     });
 
     const result = populated.map((c) => ({
-      partner:     c._id,
+      partner: c._id,
       lastMessage: c.lastMessage,
-      lastTime:    c.lastTime,
-      unread:      c.unread,
+      lastTime: c.lastTime,
+      unread: c.unread,
     }));
 
     res.json({ conversations: result });
@@ -66,27 +69,25 @@ export const getConversations = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/messages/:userId
-// Returns full message thread between current user and :userId
-// Used by: ChatWindow.jsx
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// GET MESSAGES
+// ─────────────────────────────────────────────
 export const getMessages = async (req, res) => {
   try {
     const { userId } = req.params;
-    const me = req.user.id;
+    const me = req.user._id; // ✅ FIX
 
     const messages = await Message.find({
       $or: [
-        { sender: me,     receiver: userId },
-        { sender: userId, receiver: me     },
+        { sender: me, receiver: userId },
+        { sender: userId, receiver: me },
       ],
     })
-      .populate("sender",   "name avatar role")
+      .populate("sender", "name avatar role")
       .populate("receiver", "name avatar role")
       .sort({ createdAt: 1 });
 
-    // Mark incoming messages as read
+    // mark as read
     await Message.updateMany(
       { sender: userId, receiver: me, read: false },
       { read: true }
@@ -98,62 +99,77 @@ export const getMessages = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/messages/:userId
-// Body: { text }
-// Sends a message from current user → :userId
-// Token logic:
-//   If an alumni replies to a student and the student's last message
-//   was sent within 2h → alumni gets +5 tokens
-//   If within 4h → alumni gets +3 tokens
-// Used by: ChatWindow.jsx send button
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// SEND MESSAGE
+// ─────────────────────────────────────────────
 export const sendMessage = async (req, res) => {
   try {
-    const { userId } = req.params;  // receiver
-    const { text }   = req.body;
-    const me         = req.user.id;
+    const { userId } = req.params;
+    const { content } = req.body; // ✅ FIX (text → content)
+    const me = req.user._id;
 
-    if (!text || !text.trim()) {
+    if (!content || !content.trim()) {
       return res.status(400).json({ message: "Message cannot be empty" });
     }
 
     const message = await Message.create({
-      sender:   me,
+      sender: me,
       receiver: userId,
-      text:     text.trim(),
+      content: content.trim(), // ✅ FIX
     });
 
-    await message.populate("sender",   "name avatar role");
+    await message.populate("sender", "name avatar role");
     await message.populate("receiver", "name avatar role");
 
-    // ── Token Speed Reward (alumni replying to student messages) ───────────
-    // Check if the sender is alumni and receiver is student
+    // ── Token reward logic ─────────────────────
     const sender = await BaseUser.findById(me);
+
     if (sender?.role === "alumni") {
-      // Find the most recent message from the student (receiver in this context)
       const lastStudentMsg = await Message.findOne({
-        sender:   userId,
+        sender: userId,
         receiver: me,
       }).sort({ createdAt: -1 });
 
       if (lastStudentMsg) {
-        const minutesSince = (Date.now() - new Date(lastStudentMsg.createdAt)) / 60000;
+        const minutesSince =
+          (Date.now() - new Date(lastStudentMsg.createdAt)) / 60000;
+
         let tokensEarned = 0;
 
-        if (minutesSince <= 120) {       // within 2 hours
+        if (minutesSince <= 120) {
           tokensEarned = TOKENS.REPLY_2H;
-        } else if (minutesSince <= 240) { // within 4 hours
+        } else if (minutesSince <= 240) {
           tokensEarned = TOKENS.REPLY_4H;
         }
 
         if (tokensEarned > 0) {
-          await BaseUser.findByIdAndUpdate(me, { $inc: { tokens: tokensEarned } });
+          await BaseUser.findByIdAndUpdate(me, {
+            $inc: { tokens: tokensEarned },
+          });
         }
       }
     }
 
     res.status(201).json({ message });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+// ─────────────────────────────────────────────
+// ❗ MARK AS READ (MISSING)
+// ─────────────────────────────────────────────
+export const markAsRead = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const me = req.user._id;
+
+    await Message.updateMany(
+      { sender: userId, receiver: me, read: false },
+      { read: true }
+    );
+
+    res.json({ message: "Messages marked as read" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

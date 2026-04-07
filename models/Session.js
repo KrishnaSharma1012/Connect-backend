@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from "mongoose";
 
 // Each student's enrollment record — created after payment
 const enrollmentSchema = new mongoose.Schema({
@@ -123,4 +123,4 @@ sessionSchema.index({ date: 1 });
 sessionSchema.index({ isApproved: 1, isPublished: 1, isCompleted: 1 });
 
 const Session = mongoose.model('Session', sessionSchema);
-module.exports = Session;
+export default Session;

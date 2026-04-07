@@ -7,17 +7,30 @@ import {
   toggleLike,
   addComment,
   deleteComment,
-} from "../controllers/post.controller.js";
-import { protect } from "../middleware/auth.middleware.js";
+} from "../controllers/post.js";
+
+import { protect } from "../middleware/auth.js";
 
 const router = express.Router();
 
-router.get("/",                        protect, getPosts);
-router.post("/",                       protect, createPost);
-router.put("/:id",                     protect, editPost);
-router.delete("/:id",                  protect, deletePost);
-router.post("/:id/like",               protect, toggleLike);
-router.post("/:id/comments",           protect, addComment);
-router.delete("/:id/comments/:commentId", protect, deleteComment);
+// ✅ apply once
+router.use(protect);
+
+// ─────────────────────────────
+// POSTS
+// ─────────────────────────────
+router.get("/", getPosts);
+router.post("/", createPost);
+
+router.put("/:id", editPost);
+router.delete("/:id", deletePost);
+
+router.post("/:id/like", toggleLike);
+
+// ❗ FIX (comments → comment)
+router.post("/:id/comment", addComment);
+
+// ❗ FIX (param names must match controller)
+router.delete("/:postId/comment/:commentId", deleteComment);
 
 export default router;

@@ -9,22 +9,35 @@ import {
   getAnalytics,
   getAllSessions,
   getAllCourses,
-} from "../controllers/admin.controller.js";
-import { protect, roleGuard } from "../middleware/auth.middleware.js";
+} from "../controllers/admin.js";
+
+// ✅ FIX: correct middleware path
+import { protect, roleGuard } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// All admin routes locked to role "admin"
-const guard = [protect, roleGuard("admin")];
+// ✅ Cleaner approach (applies to all routes below)
+router.use(protect, roleGuard("admin"));
 
-router.get("/users",            ...guard, getUsers);
-router.patch("/users/:id/verify",  ...guard, verifyUser);
-router.patch("/users/:id/suspend", ...guard, suspendUser);
-router.patch("/users/:id/restore", ...guard, restoreUser);
-router.delete("/users/:id",        ...guard, deleteUser);
-router.get("/stats",            ...guard, getStats);
-router.get("/analytics",        ...guard, getAnalytics);
-router.get("/sessions",         ...guard, getAllSessions);
-router.get("/courses",          ...guard, getAllCourses);
+// ─────────────────────────────
+// USER MANAGEMENT
+// ─────────────────────────────
+router.get("/users", getUsers);
+router.patch("/users/:id/verify", verifyUser);
+router.patch("/users/:id/suspend", suspendUser);
+router.patch("/users/:id/restore", restoreUser);
+router.delete("/users/:id", deleteUser);
+
+// ─────────────────────────────
+// DASHBOARD
+// ─────────────────────────────
+router.get("/stats", getStats);
+router.get("/analytics", getAnalytics);
+
+// ─────────────────────────────
+// CONTENT MANAGEMENT
+// ─────────────────────────────
+router.get("/sessions", getAllSessions);
+router.get("/courses", getAllCourses);
 
 export default router;

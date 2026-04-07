@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from "mongoose";
 
 // Reviews from students — shown on AlumniProfile → Reviews tab
 const reviewSchema = new mongoose.Schema({
@@ -124,4 +124,4 @@ courseSchema.index({ isApproved: 1, isPublished: 1 });
 courseSchema.index({ 'rating.average': -1 });
 
 const Course = mongoose.model('Course', courseSchema);
-module.exports = Course;
+export default Course;

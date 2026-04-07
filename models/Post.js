@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from "mongoose";
 
 // PostCard supports both single image (legacy) and multi-file media grid
 const mediaSchema = new mongoose.Schema({
@@ -87,5 +87,7 @@ postSchema.index({ author: 1, createdAt: -1 });
 postSchema.index({ tags: 1 });
 postSchema.index({ createdAt: -1 });
 
-const Post = mongoose.model('Post', postSchema);
-module.exports = Post;
+// const Post = mongoose.model('Post', postSchema);
+// module.exports = Post;
+const Post = mongoose.model("Post", postSchema);
+export default Post;

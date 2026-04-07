@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from "mongoose";
 const BaseUser = require('./BaseUser');
 
 const adminSchema = new mongoose.Schema({
@@ -32,4 +32,4 @@ const adminSchema = new mongoose.Schema({
 
 const Admin = BaseUser.discriminator('admin', adminSchema);
 
-module.exports = Admin;
+export default Admin;

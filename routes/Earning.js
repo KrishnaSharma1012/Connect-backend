@@ -3,14 +3,20 @@ import {
   getMyEarnings,
   getEarningStats,
   requestWithdrawal,
-} from "../controllers/earning.controller.js";
-import { protect, roleGuard, premiumGuard } from "../middleware/auth.middleware.js";
+} from "../controllers/earning.js";
+
+import { protect, roleGuard, premiumGuard } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// All earning routes: alumni + premium only
-router.get("/",            protect, roleGuard("alumni"), premiumGuard, getMyEarnings);
-router.get("/stats",       protect, roleGuard("alumni"), premiumGuard, getEarningStats);
-router.post("/withdraw",   protect, roleGuard("alumni"), premiumGuard, requestWithdrawal);
+// ✅ Apply guards once (cleaner)
+router.use(protect, roleGuard("alumni"), premiumGuard);
+
+// ─────────────────────────────
+// EARNINGS
+// ─────────────────────────────
+router.get("/", getMyEarnings);
+router.get("/stats", getEarningStats);
+router.post("/withdraw", requestWithdrawal);
 
 export default router;

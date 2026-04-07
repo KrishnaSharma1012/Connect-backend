@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from "mongoose";
 
 const messageSchema = new mongoose.Schema(
   {
@@ -51,4 +51,4 @@ messageSchema.statics.getConversationId = function (userId1, userId2) {
 };
 
 const Message = mongoose.model('Message', messageSchema);
-module.exports = Message;
+export default Message;

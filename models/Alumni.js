@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from "mongoose";
 const BaseUser = require('./BaseUser');
 
 // ── Sub-schemas ──────────────────────────────────────────────
@@ -230,4 +230,4 @@ alumniSchema.methods.availablePayout = function () {
 
 const Alumni = BaseUser.discriminator('alumni', alumniSchema);
 
-module.exports = Alumni;
+export default Alumni;

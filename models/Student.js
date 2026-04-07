@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from "mongoose";
 const BaseUser = require('./BaseUser');
 
 // ── Sub-schemas ──────────────────────────────────────────────
@@ -143,4 +143,4 @@ studentSchema.methods.isEnrolledInSession = function (sessionId) {
 
 const Student = BaseUser.discriminator('student', studentSchema);
 
-module.exports = Student;
+export default Student;

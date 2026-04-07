@@ -1,32 +1,36 @@
 import jwt from "jsonwebtoken";
-import User from "../models/User.model.js";
+import BaseUser from "../models/BaseUser.js";
 
 // ── Protect: verify JWT, attach user to req ─────────────────
 export const protect = async (req, res, next) => {
   try {
     let token;
 
-    // 1. Check Authorization header first
+    // 1. Check Authorization header
     if (req.headers.authorization?.startsWith("Bearer ")) {
       token = req.headers.authorization.split(" ")[1];
     }
-    // 2. Fall back to HTTP-only cookie
-    else if (req.cookies?.token) {
-      token = req.cookies.token;
+    // 2. Check cookie (IMPORTANT FIX)
+    else if (req.cookies?.connect_token) {
+      token = req.cookies.connect_token;
     }
 
     if (!token) {
       return res.status(401).json({ message: "Not authenticated. Please log in." });
     }
 
+    // 🔹 Decode token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.userId).select("-password");
+
+    // 🔹 Find user (IMPORTANT FIX)
+    const user = await BaseUser.findById(decoded.id).select("-password");
 
     if (!user) {
       return res.status(401).json({ message: "User no longer exists." });
     }
 
-    if (user.isSuspended) {
+    // 🔹 Suspension check (IMPORTANT FIX)
+    if (user.status === "suspended") {
       return res.status(403).json({ message: "Your account has been suspended." });
     }
 
@@ -37,8 +41,7 @@ export const protect = async (req, res, next) => {
   }
 };
 
-// ── Role guard: restrict to specific roles ──────────────────
-// Usage: roleGuard("admin") or roleGuard("admin", "alumni")
+// ── Role guard ──────────────────
 export const roleGuard = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user?.role)) {
@@ -50,7 +53,7 @@ export const roleGuard = (...roles) => {
   };
 };
 
-// ── Premium guard: alumni must have alumniPlan === "premium" ─
+// ── Premium guard ─────────────────
 export const premiumGuard = (req, res, next) => {
   if (req.user?.role === "alumni" && req.user?.alumniPlan !== "premium") {
     return res.status(403).json({

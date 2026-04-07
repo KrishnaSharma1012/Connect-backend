@@ -6,16 +6,24 @@ import {
   getMyConnections,
   getPendingRequests,
   getConnectionStatus,
-} from "../controllers/connection.controller.js";
-import { protect } from "../middleware/auth.middleware.js";
+} from "../controllers/connection.js"; // ✅ FIX
+
+import { protect } from "../middleware/auth.js"; // ✅ FIX
 
 const router = express.Router();
 
-router.post("/:userId",          protect, sendRequest);          // AlumniCard "Connect" btn
-router.patch("/:userId/accept",  protect, acceptRequest);
-router.patch("/:userId/reject",  protect, rejectRequest);
-router.get("/",                  protect, getMyConnections);
-router.get("/pending",           protect, getPendingRequests);
-router.get("/status/:userId",    protect, getConnectionStatus);  // check btn state per card
+// ─────────────────────────────
+// CONNECTION ACTIONS
+// ─────────────────────────────
+router.post("/request/:alumniId", protect, sendRequest); // ✅ FIX
+router.patch("/accept/:requestId", protect, acceptRequest); // ✅ FIX
+router.patch("/reject/:requestId", protect, rejectRequest); // ✅ FIX
+
+// ─────────────────────────────
+// FETCH DATA
+// ─────────────────────────────
+router.get("/", protect, getMyConnections);
+router.get("/pending", protect, getPendingRequests);
+router.get("/status/:userId", protect, getConnectionStatus);
 
 export default router;

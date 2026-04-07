@@ -4,14 +4,28 @@ import {
   getUserById,
   updateProfile,
   uploadAvatar,
-} from "../controllers/user.controller.js";
-import { protect } from "../middleware/auth.middleware.js";
+  upgradePlan, // ✅ ADD (missing)
+} from "../controllers/user.js";
+
+import { protect } from "../middleware/auth.js";
 
 const router = express.Router();
 
-router.get("/alumni",      protect, getAlumni);        // Networking page alumni list
-router.get("/:id",         protect, getUserById);      // AlumniProfile page
-router.put("/profile",     protect, updateProfile);    // EditProfile.jsx
-router.post("/avatar",     protect, uploadAvatar);     // Cloudinary avatar upload
+// ─────────────────────────────
+// PUBLIC / SEMI-PUBLIC
+// ─────────────────────────────
+router.get("/alumni", getAlumni); // ✅ better without auth
+router.get("/:id", protect, getUserById);
+
+// ─────────────────────────────
+// USER ACTIONS
+// ─────────────────────────────
+router.use(protect); // ✅ cleaner
+
+router.put("/profile", updateProfile);
+router.post("/avatar", uploadAvatar);
+
+// ✅ ADD (important — you removed from auth.routes earlier)
+router.patch("/upgrade-plan", upgradePlan);
 
 export default router;
