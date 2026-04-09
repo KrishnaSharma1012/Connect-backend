@@ -6,8 +6,8 @@ import BaseUser from "../models/BaseUser.js";
 // ─────────────────────────────────────────────
 export const sendRequest = async (req, res) => {
   try {
-    const { alumniId } = req.params;
-    const studentId = req.user._id; // ✅ FIX (_id instead of id)
+    const alumniId = req.params.id; // ✅ FIX
+    const studentId = req.user._id;
 
     if (studentId.toString() === alumniId) {
       return res.status(400).json({ message: "Cannot connect with yourself" });
@@ -18,7 +18,6 @@ export const sendRequest = async (req, res) => {
       return res.status(404).json({ message: "Alumni not found" });
     }
 
-    // 🔥 IMPORTANT: check both directions
     const existing = await Connection.findOne({
       $or: [
         { from: studentId, to: alumniId },
@@ -55,7 +54,7 @@ export const sendRequest = async (req, res) => {
 // ─────────────────────────────────────────────
 export const acceptRequest = async (req, res) => {
   try {
-    const connection = await Connection.findById(req.params.requestId);
+    const connection = await Connection.findById(req.params.id); // ✅ FIX
 
     if (!connection) {
       return res.status(404).json({ message: "Connection request not found" });
@@ -75,11 +74,11 @@ export const acceptRequest = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────
-// ❗ NEW: REJECT REQUEST (MISSING)
+// REJECT REQUEST
 // ─────────────────────────────────────────────
 export const rejectRequest = async (req, res) => {
   try {
-    const connection = await Connection.findById(req.params.requestId);
+    const connection = await Connection.findById(req.params.id); // ✅ FIX
 
     if (!connection) {
       return res.status(404).json({ message: "Connection request not found" });
@@ -136,12 +135,11 @@ export const getPendingRequests = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────
-// ❗ NEW: GET CONNECTION STATUS (VERY IMPORTANT)
-// Used by frontend button (Connect / Pending / Connected)
+// GET CONNECTION STATUS
 // ─────────────────────────────────────────────
 export const getConnectionStatus = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.params.id; // ✅ FIX
     const currentUserId = req.user._id;
 
     const connection = await Connection.findOne({
@@ -152,7 +150,7 @@ export const getConnectionStatus = async (req, res) => {
     });
 
     if (!connection) {
-      return res.json({ status: "none" });
+      return res.json({ status: "connect" }); // ✅ FIX
     }
 
     res.json({ status: connection.status });

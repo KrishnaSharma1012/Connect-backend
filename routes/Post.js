@@ -13,24 +13,38 @@ import { protect } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// ✅ apply once
+// ─────────────────────────────
+// APPLY AUTH MIDDLEWARE
+// ─────────────────────────────
 router.use(protect);
 
 // ─────────────────────────────
 // POSTS
 // ─────────────────────────────
+
+// Get all posts
 router.get("/", getPosts);
+
+// Create post
 router.post("/", createPost);
 
+// Edit post
 router.put("/:id", editPost);
+
+// Delete post
 router.delete("/:id", deletePost);
 
+// Like / Unlike post
 router.post("/:id/like", toggleLike);
 
-// ❗ FIX (comments → comment)
+// ─────────────────────────────
+// COMMENTS
+// ─────────────────────────────
+
+// Add comment
 router.post("/:id/comment", addComment);
 
-// ❗ FIX (param names must match controller)
-router.delete("/:postId/comment/:commentId", deleteComment);
+// Delete comment (FIXED param naming)
+router.delete("/:id/comment/:commentId", deleteComment);
 
 export default router;

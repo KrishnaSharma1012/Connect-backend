@@ -10,20 +10,28 @@ export const getAlumni = async (req, res) => {
 
     const filter = { role: "alumni", status: "active" };
 
-    if (college) filter.college = { $regex: college, $options: "i" };
-    if (isPremium === "true") filter.alumniPlan = "premium"; // ✅ FIX
-    if (has24h === "true") filter.has24hReply = true; // ✅ FIX
+    if (college) {
+      filter.college = { $regex: college, $options: "i" };
+    }
+
+    if (isPremium === "true") {
+      filter.alumniPlan = "premium";
+    }
+
+    if (has24h === "true") {
+      filter.has24hReply = true;
+    }
 
     const skip = (Number(page) - 1) * Number(limit);
     const total = await BaseUser.countDocuments(filter);
 
     const alumni = await BaseUser.find(filter)
       .select(
-        "name email college company avatar about skills alumniPlan isVerified tokens has24hReply isCollegePartner"
+        "name email college company avatar about skills alumniPlan isVerified has24hReply isCollegePartner"
       )
       .skip(skip)
       .limit(Number(limit))
-      .sort({ isVerified: -1, tokens: -1 });
+      .sort({ isVerified: -1, createdAt: -1 }); // ✅ FIXED (removed tokens)
 
     res.json({
       alumni,
@@ -43,7 +51,9 @@ export const getUserById = async (req, res) => {
   try {
     const user = await BaseUser.findById(req.params.id).select("-password");
 
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
     res.json({ user });
   } catch (err) {
@@ -59,26 +69,32 @@ export const updateProfile = async (req, res) => {
     const { name, about, skills, college, company, avatar, coverPhoto } = req.body;
 
     const updates = {};
+
     if (name) updates.name = name;
     if (about) updates.about = about;
-    if (skills) updates.skills = skills;
+
+    // ✅ FIX skills handling
+    if (skills) {
+      updates.skills = Array.isArray(skills) ? skills : skills.split(",");
+    }
+
     if (college) updates.college = college;
     if (company) updates.company = company;
 
-    // avatar upload
+    // ✅ avatar upload
     if (avatar && avatar.startsWith("data:")) {
       const { url } = await uploadImage(avatar, "avatars");
       updates.avatar = url;
     }
 
-    // cover upload
+    // ✅ cover upload
     if (coverPhoto && coverPhoto.startsWith("data:")) {
       const { url } = await uploadImage(coverPhoto, "covers");
       updates.coverPhoto = url;
     }
 
     const user = await BaseUser.findByIdAndUpdate(
-      req.user._id, // ✅ FIX
+      req.user._id,
       { $set: updates },
       { new: true, runValidators: true }
     ).select("-password");
@@ -90,37 +106,14 @@ export const updateProfile = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────
-// ❗ NEW: UPLOAD AVATAR (MISSING)
-// ─────────────────────────────────────────────
-export const uploadAvatar = async (req, res) => {
-  try {
-    const { image } = req.body;
-
-    if (!image) {
-      return res.status(400).json({ message: "Image is required" });
-    }
-
-    const { url } = await uploadImage(image, "avatars");
-
-    const user = await BaseUser.findByIdAndUpdate(
-      req.user._id,
-      { avatar: url },
-      { new: true }
-    ).select("-password");
-
-    res.json({ message: "Avatar uploaded", avatar: user.avatar });
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
-
-// ─────────────────────────────────────────────
 // UPGRADE PLAN
 // ─────────────────────────────────────────────
 export const upgradePlan = async (req, res) => {
   try {
     if (req.user.role !== "alumni") {
-      return res.status(403).json({ message: "Only alumni can upgrade plans" });
+      return res.status(403).json({
+        message: "Only alumni can upgrade plans",
+      });
     }
 
     const { plan } = req.body;
@@ -130,12 +123,15 @@ export const upgradePlan = async (req, res) => {
     }
 
     const user = await BaseUser.findByIdAndUpdate(
-      req.user._id, // ✅ FIX
+      req.user._id,
       { alumniPlan: plan },
       { new: true }
     ).select("-password");
 
-    res.json({ message: `Plan upgraded to ${plan}`, user });
+    res.json({
+      message: `Plan upgraded to ${plan}`,
+      user,
+    });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

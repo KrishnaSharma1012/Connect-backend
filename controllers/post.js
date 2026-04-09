@@ -13,7 +13,7 @@ export const getPosts = async (req, res) => {
 
     const posts = await Post.find()
       .populate("author", "name avatar role college company alumniPlan isVerified")
-      .populate("comments.author", "name avatar role") // ✅ ADD
+      .populate("comments.author", "name avatar role")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit));
@@ -34,30 +34,33 @@ export const getPosts = async (req, res) => {
 // ─────────────────────────────────────────────
 export const createPost = async (req, res) => {
   try {
-    const { content, media, tags } = req.body;
+    const { content, media = [], tags = [] } = req.body;
 
     if (!content || !content.trim()) {
       return res.status(400).json({ message: "Post content cannot be empty" });
     }
 
+    // ✅ Upload images in parallel (optimized)
     let uploadedMedia = [];
-
-    // ✅ OPTIONAL: upload images if provided
-    if (media && media.length > 0) {
-      for (let file of media) {
-        const result = await uploadImage(file, "posts");
-        uploadedMedia.push(result.url);
-      }
+    if (media.length > 0) {
+      uploadedMedia = await Promise.all(
+        media.map(file =>
+          uploadImage(file, "posts").then(res => res.url)
+        )
+      );
     }
 
     const post = await Post.create({
-      author: req.user._id, // ✅ FIX
+      author: req.user._id,
       content: content.trim(),
-      media: uploadedMedia.length ? uploadedMedia : [],
-      tags: tags || [],
+      media: uploadedMedia,
+      tags,
     });
 
-    await post.populate("author", "name avatar role college company alumniPlan isVerified");
+    await post.populate(
+      "author",
+      "name avatar role college company alumniPlan isVerified"
+    );
 
     res.status(201).json({ message: "Post created", post });
   } catch (err) {
@@ -73,8 +76,12 @@ export const toggleLike = async (req, res) => {
     const post = await Post.findById(req.params.id);
     if (!post) return res.status(404).json({ message: "Post not found" });
 
-    const userId = req.user._id; // ✅ FIX
-    const alreadyLiked = post.likes.includes(userId);
+    const userId = req.user._id;
+
+    // ✅ FIX ObjectId comparison
+    const alreadyLiked = post.likes.some(
+      (id) => id.toString() === userId.toString()
+    );
 
     if (alreadyLiked) {
       post.likes.pull(userId);
@@ -98,7 +105,7 @@ export const toggleLike = async (req, res) => {
 // ─────────────────────────────────────────────
 export const addComment = async (req, res) => {
   try {
-    const { content } = req.body; // ✅ FIX (text → content)
+    const { content } = req.body;
 
     if (!content || !content.trim()) {
       return res.status(400).json({ message: "Comment cannot be empty" });
@@ -108,8 +115,8 @@ export const addComment = async (req, res) => {
     if (!post) return res.status(404).json({ message: "Post not found" });
 
     const comment = {
-      author: req.user._id, // ✅ FIX
-      content: content.trim(), // ✅ FIX
+      author: req.user._id,
+      content: content.trim(),
     };
 
     post.comments.push(comment);
@@ -126,13 +133,13 @@ export const addComment = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────
-// ❗ DELETE COMMENT (MISSING)
+// DELETE COMMENT
 // ─────────────────────────────────────────────
 export const deleteComment = async (req, res) => {
   try {
-    const { postId, commentId } = req.params;
+    const { id, commentId } = req.params; // ✅ FIXED
 
-    const post = await Post.findById(postId);
+    const post = await Post.findById(id);
     if (!post) return res.status(404).json({ message: "Post not found" });
 
     const comment = post.comments.id(commentId);
@@ -178,7 +185,10 @@ export const editPost = async (req, res) => {
     post.isEdited = true;
 
     await post.save();
-    await post.populate("author", "name avatar role college company alumniPlan isVerified");
+    await post.populate(
+      "author",
+      "name avatar role college company alumniPlan isVerified"
+    );
 
     res.json({ message: "Post updated", post });
   } catch (err) {

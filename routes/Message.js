@@ -11,16 +11,24 @@ import { protect } from "../middleware/auth.js";
 const router = express.Router();
 
 // ─────────────────────────────
+// APPLY AUTH MIDDLEWARE
+// ─────────────────────────────
+router.use(protect);
+
+// ─────────────────────────────
 // MESSAGES
 // ─────────────────────────────
-router.use(protect); // ✅ cleaner (applies to all routes)
 
+// Get all conversations
 router.get("/conversations", getConversations);
+
+// Get chat with specific user
 router.get("/:userId", getMessages);
 
+// Send message
 router.post("/:userId", sendMessage);
 
-// ✅ FIX (route order + clarity)
-router.patch("/read/:userId", markAsRead);
+// Mark messages as read (FIXED)
+router.patch("/:userId/read", markAsRead);
 
 export default router;

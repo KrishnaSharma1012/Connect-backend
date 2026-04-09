@@ -6,24 +6,36 @@ import {
   getMyConnections,
   getPendingRequests,
   getConnectionStatus,
-} from "../controllers/connection.js"; // ✅ FIX
+} from "../controllers/connection.js";
 
-import { protect } from "../middleware/auth.js"; // ✅ FIX
+import { protect } from "../middleware/auth.js";
 
 const router = express.Router();
 
 // ─────────────────────────────
 // CONNECTION ACTIONS
 // ─────────────────────────────
-router.post("/request/:alumniId", protect, sendRequest); // ✅ FIX
-router.patch("/accept/:requestId", protect, acceptRequest); // ✅ FIX
-router.patch("/reject/:requestId", protect, rejectRequest); // ✅ FIX
+
+// Send request
+router.post("/:id", protect, sendRequest);
+
+// Accept request
+router.patch("/:id/accept", protect, acceptRequest);
+
+// Reject request
+router.patch("/:id/reject", protect, rejectRequest);
 
 // ─────────────────────────────
 // FETCH DATA
 // ─────────────────────────────
+
+// All connections
 router.get("/", protect, getMyConnections);
+
+// Pending requests
 router.get("/pending", protect, getPendingRequests);
-router.get("/status/:userId", protect, getConnectionStatus);
+
+// Connection status (for button state)
+router.get("/status/:id", protect, getConnectionStatus);
 
 export default router;

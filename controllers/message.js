@@ -105,7 +105,7 @@ export const getMessages = async (req, res) => {
 export const sendMessage = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { content } = req.body; // ✅ FIX (text → content)
+    const { content } = req.body;
     const me = req.user._id;
 
     if (!content || !content.trim()) {
@@ -115,40 +115,11 @@ export const sendMessage = async (req, res) => {
     const message = await Message.create({
       sender: me,
       receiver: userId,
-      content: content.trim(), // ✅ FIX
+      content: content.trim(),
     });
 
     await message.populate("sender", "name avatar role");
     await message.populate("receiver", "name avatar role");
-
-    // ── Token reward logic ─────────────────────
-    const sender = await BaseUser.findById(me);
-
-    if (sender?.role === "alumni") {
-      const lastStudentMsg = await Message.findOne({
-        sender: userId,
-        receiver: me,
-      }).sort({ createdAt: -1 });
-
-      if (lastStudentMsg) {
-        const minutesSince =
-          (Date.now() - new Date(lastStudentMsg.createdAt)) / 60000;
-
-        let tokensEarned = 0;
-
-        if (minutesSince <= 120) {
-          tokensEarned = TOKENS.REPLY_2H;
-        } else if (minutesSince <= 240) {
-          tokensEarned = TOKENS.REPLY_4H;
-        }
-
-        if (tokensEarned > 0) {
-          await BaseUser.findByIdAndUpdate(me, {
-            $inc: { tokens: tokensEarned },
-          });
-        }
-      }
-    }
 
     res.status(201).json({ message });
   } catch (err) {

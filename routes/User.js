@@ -3,8 +3,7 @@ import {
   getAlumni,
   getUserById,
   updateProfile,
-  uploadAvatar,
-  upgradePlan, // ✅ ADD (missing)
+  upgradePlan,
 } from "../controllers/user.js";
 
 import { protect } from "../middleware/auth.js";
@@ -12,20 +11,24 @@ import { protect } from "../middleware/auth.js";
 const router = express.Router();
 
 // ─────────────────────────────
-// PUBLIC / SEMI-PUBLIC
+// PUBLIC ROUTES
 // ─────────────────────────────
-router.get("/alumni", getAlumni); // ✅ better without auth
-router.get("/:id", protect, getUserById);
+
+// Get all alumni (networking page)
+router.get("/alumni", getAlumni);
 
 // ─────────────────────────────
-// USER ACTIONS
+// PROTECTED ROUTES
 // ─────────────────────────────
-router.use(protect); // ✅ cleaner
+router.use(protect);
 
+// Get single user profile
+router.get("/:id", getUserById);
+
+// Update profile (includes avatar upload already)
 router.put("/profile", updateProfile);
-router.post("/avatar", uploadAvatar);
 
-// ✅ ADD (important — you removed from auth.routes earlier)
+// Upgrade alumni plan (simple → premium)
 router.patch("/upgrade-plan", upgradePlan);
 
 export default router;
